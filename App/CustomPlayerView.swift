@@ -59,6 +59,7 @@ final class VideoLayerView: UIView {
     @State private var dragStart = 0.0
     @State private var feedback = ""
     @State private var hideTask: Task<Void,Never>?
+    @State private var lastSingleTap = -10.0
     @State private var holding = false
     @State private var speedBeforeHold: Float = 1
     private let accent = Color.yellow
@@ -71,7 +72,7 @@ final class VideoLayerView: UIView {
                 LinearGradient(colors:[.black.opacity(0.28),.clear,.clear,.black.opacity(0.35)],startPoint:.top,endPoint:.bottom).allowsHitTesting(false)
                 Color.clear.contentShape(Rectangle())
                     .gesture(TapGesture(count:2).onEnded { let paused = model.playing; model.toggle(); signal(paused ? "已暂停" : "继续播放") }
-                        .exclusively(before: TapGesture().onEnded { reveal() }))
+                        .exclusively(before: TapGesture().onEnded { toggleControls() }))
                     .simultaneousGesture(DragGesture(minimumDistance:18)
                         .onChanged { value in updateDrag(value,size:geometry.size) }
                         .onEnded { value in endDrag(value,size:geometry.size) })
@@ -163,11 +164,20 @@ final class VideoLayerView: UIView {
         guard seconds.isFinite else { return "00:00" }
         let n = max(0,Int(seconds)); return n >= 3600 ? String(format:"%d:%02d:%02d",n/3600,(n/60)%60,n%60) : String(format:"%02d:%02d",n/60,n%60)
     }
+    private func toggleControls() {
+        let now = ProcessInfo.processInfo.systemUptime
+        // Some simultaneous gestures can report the same physical touch twice.
+        guard now - lastSingleTap > 0.25 else { return }
+        lastSingleTap = now
+        if controlsVisible {
+            hideTask?.cancel()
+            withAnimation(.easeInOut(duration:0.2)) { controlsVisible = false }
+        } else { reveal() }
+    }
     private func reveal() {
         withAnimation(.easeInOut(duration:0.2)) { controlsVisible = true }
         hideTask?.cancel()
-        // In the split-screen player, keep the compact controls visible so a tap
-        // cannot immediately race with the full-screen auto-hide timer.
+        // Inline controls stay until the next tap; full-screen controls also time out.
         guard fullscreen else { return }
         hideTask = Task { try? await Task.sleep(for:.seconds(3.5)); if !Task.isCancelled && !seekingSlider { withAnimation { controlsVisible = false } } }
     }
