@@ -71,24 +71,22 @@ final class VideoLayerView: UIView {
                 LinearGradient(colors:[.black.opacity(0.28),.clear,.clear,.black.opacity(0.35)],startPoint:.top,endPoint:.bottom).allowsHitTesting(false)
                 Color.clear.contentShape(Rectangle())
                     .gesture(TapGesture(count:2).onEnded { let paused = model.playing; model.toggle(); signal(paused ? "已暂停" : "继续播放") }
-                        .exclusively(before: TapGesture().onEnded {
-                            if controlsVisible { hideTask?.cancel(); withAnimation { controlsVisible = false } }
-                            else { reveal() }
-                        }))
+                        .exclusively(before: TapGesture().onEnded { reveal() }))
                     .simultaneousGesture(DragGesture(minimumDistance:18)
                         .onChanged { value in updateDrag(value,size:geometry.size) }
                         .onEnded { value in endDrag(value,size:geometry.size) })
-                    .onLongPressGesture(minimumDuration:0.45,pressing: { pressed in
-                        if pressed && !holding {
-                            holding = true; speedBeforeHold = model.preferredRate
-                            if model.playing { model.player.rate = 2 }
-                            signal("2× 快速播放")
-                        } else if !pressed && holding {
+                    .onLongPressGesture(minimumDuration:0.7,maximumDistance:10,pressing: { pressed in
+                        if !pressed && holding {
                             holding = false
                             if model.playing { model.player.rate = speedBeforeHold }
                             feedback = ""
                         }
-                    },perform: {})
+                    },perform: {
+                        guard !holding && model.playing else { return }
+                        holding = true; speedBeforeHold = model.preferredRate
+                        if model.playing { model.player.rate = 2 }
+                        signal("2× 快速播放")
+                    })
                 if !feedback.isEmpty {
                     Text(feedback).font(.callout.weight(.semibold))
                         .padding(.horizontal,18).padding(.vertical,10)
@@ -168,6 +166,9 @@ final class VideoLayerView: UIView {
     private func reveal() {
         withAnimation(.easeInOut(duration:0.2)) { controlsVisible = true }
         hideTask?.cancel()
+        // In the split-screen player, keep the compact controls visible so a tap
+        // cannot immediately race with the full-screen auto-hide timer.
+        guard fullscreen else { return }
         hideTask = Task { try? await Task.sleep(for:.seconds(3.5)); if !Task.isCancelled && !seekingSlider { withAnimation { controlsVisible = false } } }
     }
     private func signal(_ message:String) {

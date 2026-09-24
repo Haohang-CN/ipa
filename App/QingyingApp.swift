@@ -30,7 +30,7 @@ import AVKit
         NavigationStack {
             VStack(spacing:12) {
                 HStack {
-                    Text("清影 · iPad").font(.title2.bold())
+                    Text("清影 · iPad · \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")").font(.title2.bold())
                     Button("下载管理") { downloadSheet = true }.buttonStyle(.bordered)
                     Spacer()
                     TextField("搜索影片或粘贴站内链接",text:$query).textFieldStyle(.roundedBorder).frame(maxWidth:430).onSubmit { search() }
