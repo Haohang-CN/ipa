@@ -1,1 +1,44 @@
+name: Build iPad IPA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Compile for physical iPad
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          xcodebuild -version | tee output/toolchain.txt
+          xcodebuild -project Qingying.xcodeproj -scheme Qingying -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build 2>&1 | tee output/build.log
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/Payload
+          cp -R build/Build/Products/Release-iphoneos/Qingying.app output/Payload/
+          test -f output/Payload/Qingying.app/Qingying
+          cd output
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload Qingying-iPad-unsigned.ipa
+          shasum -a 256 Qingying-iPad-unsigned.ipa > SHA256.txt
+      - name: Upload IPA and build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qingying-iPad-build
+          path: |
+            output/*.ipa
+            output/*.txt
+            output/*.log
+          if-no-files-found: warn
+          retention-days: 14
 
